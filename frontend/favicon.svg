@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <defs>
+    <radialGradient id="blackDisc" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#4C566A" />
+      <stop offset="100%" stop-color="#2E3440" />
+    </radialGradient>
+
+    <radialGradient id="whiteDisc" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#D8DEE9" />
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="40" height="40" fill="#434C5E" rx="2" />
+
+  <rect x="1" y="1" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="11" y="1" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="21" y="1" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="31" y="1" width="8" height="8" fill="#A3BE8C" rx="1" />
+
+  <rect x="1" y="11" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="11" y="11" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="21" y="11" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="31" y="11" width="8" height="8" fill="#A3BE8C" rx="1" />
+
+  <rect x="1" y="21" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="11" y="21" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="21" y="21" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="31" y="21" width="8" height="8" fill="#A3BE8C" rx="1" />
+
+  <rect x="1" y="31" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="11" y="31" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="21" y="31" width="8" height="8" fill="#A3BE8C" rx="1" />
+  <rect x="31" y="31" width="8" height="8" fill="#A3BE8C" rx="1" />
+
+  <circle cx="15" cy="15" r="3.5" fill="url(#whiteDisc)" />
+  <circle cx="25" cy="15" r="3.5" fill="url(#blackDisc)" />
+
+  <circle cx="15" cy="25" r="3.5" fill="url(#blackDisc)" />
+  <circle cx="25" cy="25" r="3.5" fill="url(#whiteDisc)" />
+
+  <circle cx="15" cy="5" r="1.5" fill="rgba(46,52,64,0.5)" />
+  <circle cx="5" cy="15" r="1.5" fill="rgba(46,52,64,0.5)" />
+  <circle cx="35" cy="25" r="1.5" fill="rgba(46,52,64,0.5)" />
+  <circle cx="25" cy="35" r="1.5" fill="rgba(46,52,64,0.5)" />
+</svg>

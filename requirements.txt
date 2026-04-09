@@ -1,0 +1,4 @@
+websockets>=16.0
+ruff
+pyright
+pdoc
