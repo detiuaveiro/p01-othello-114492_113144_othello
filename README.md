@@ -1,3 +1,4 @@
+[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/64wEcMIk)
 # <img src="frontend/favicon.svg" alt="logo" width="128" height="128" align="middle"> SI2 - Othello
 
 Othello is a classic strategy board game played on an 8x8 grid. The game involves two players, Black and White, who take turns placing their discs on the board. The primary objective is to out-position your opponent by "sandwiching" their pieces between your own, which allows you to flip them to your color. The player with the most discs of their color on the board when no more moves can be made wins the game.
