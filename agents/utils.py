@@ -1,5 +1,3 @@
-import copy
-
 class OthelloLogic:
     SIZE = 8
     DIRECTIONS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
@@ -26,19 +24,17 @@ class OthelloLogic:
                 flips.extend(temp_flips)
         return flips
 
-    @staticmethod
     def simulate_move(board, player_id, x, y):
-        """Retorna uma CÓPIA do tabuleiro após a jogada."""
         flips = OthelloLogic.get_flips(board, player_id, x, y)
         if not flips:
-            return None # Jogada inválida
-        
-        # Criamos uma cópia profunda para não estragar o tabuleiro original
-        new_board = copy.deepcopy(board)
+            return None
+
+        new_board = [row[:] for row in board]
+
         new_board[y][x] = player_id
         for fx, fy in flips:
             new_board[fy][fx] = player_id
-            
+
         return new_board
 
     @staticmethod
@@ -50,3 +46,26 @@ class OthelloLogic:
                 if len(OthelloLogic.get_flips(board, player_id, x, y)) > 0:
                     actions.append([x, y])
         return actions
+
+    @staticmethod
+    def evaluate_board(board, player_id):
+        opponent = 3 - player_id
+        score = 0
+        weights = [
+            [100, -20, 10, 5, 5, 10, -20, 100],
+            [-20, -50, -2, -2, -2, -2, -50, -20],
+            [10, -2, 5, 1, 1, 5, -2, 10],
+            [5, -2, 1, 0, 0, 1, -2, 5],
+            [5, -2, 1, 0, 0, 1, -2, 5],
+            [10, -2, 5, 1, 1, 5, -2, 10],
+            [-20, -50, -2, -2, -2, -2, -50, -20],
+            [100, -20, 10, 5, 5, 10, -20, 100],
+        ]
+
+        for y in range(8):
+            for x in range(8):
+                if board[y][x] == player_id:
+                    score += weights[y][x]
+                elif board[y][x] == opponent:
+                    score -= weights[y][x]
+        return score
