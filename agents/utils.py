@@ -24,6 +24,7 @@ class OthelloLogic:
                 flips.extend(temp_flips)
         return flips
 
+    @staticmethod
     def simulate_move(board, player_id, x, y):
         flips = OthelloLogic.get_flips(board, player_id, x, y)
         if not flips:
@@ -48,7 +49,7 @@ class OthelloLogic:
         return actions
 
     @staticmethod
-    def evaluate_board(board, player_id):
+    def evaluate_board(board, player_id, use_mobility=False):
         opponent = 3 - player_id
         score = 0
         weights = [
@@ -68,4 +69,10 @@ class OthelloLogic:
                     score += weights[y][x]
                 elif board[y][x] == opponent:
                     score -= weights[y][x]
+        if use_mobility:
+            my_moves = len(OthelloLogic.get_valid_moves(board, player_id))
+            opp_moves = len(OthelloLogic.get_valid_moves(board, opponent))
+            # No Othello, ter mais opções que o adversário é quase vitória garantida
+            score += 15 * (my_moves - opp_moves)
+
         return score

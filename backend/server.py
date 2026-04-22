@@ -91,7 +91,9 @@ class OthelloServer:
                     await self.check_start_conditions()
                     await self.agent_loop(websocket, 2)
                 else:
-                    logging.warning("Extra agent attempted to connect. Closing connection.")
+                    logging.warning(
+                        "Extra agent attempted to connect. Closing connection."
+                    )
                     await websocket.close()
             else:
                 logging.warning(f"Unknown client type: {client_type}")
@@ -144,7 +146,9 @@ class OthelloServer:
                         if self.process_move(player_id, x, y):
                             await self.advance_turn()
                         else:
-                            logging.warning(f"Invalid move from Player {player_id}: ({x}, {y})")
+                            logging.warning(
+                                f"Invalid move from Player {player_id}: ({x}, {y})"
+                            )
             except Exception as e:
                 logging.error(f"Error processing move: {e}")
 
@@ -261,7 +265,9 @@ class OthelloServer:
                 await self.check_game_over()
                 return
             else:
-                logging.info(f"Player {next_player} has no moves. Turn remains with Player {self.current_turn}")
+                logging.info(
+                    f"Player {next_player} has no moves. Turn remains with Player {self.current_turn}"
+                )
 
         if self.running:
             await self.broadcast_state()
@@ -320,7 +326,9 @@ class OthelloServer:
         """Broadcasts the current game state to all agents."""
         async with self.broadcast_lock:
             valid_actions: List[List[int]] = self.get_valid_actions(self.current_turn)
-            logging.info(f"Broadcasting state for Player {self.current_turn}. Valid moves: {valid_actions}")
+            logging.info(
+                f"Broadcasting state for Player {self.current_turn}. Valid moves: {valid_actions}"
+            )
             payload: Dict[str, Any] = {
                 "type": "state",
                 "board": self.board,
