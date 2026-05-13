@@ -7,6 +7,7 @@ import time
 from collections import deque
 from src.network import OthelloNet
 from src.environment import OthelloEnv
+from agents.utils import OthelloLogic
 from agents.classical_agent import ClassicalAgent
 import torch.nn.functional as F
 import numpy as np
@@ -35,8 +36,7 @@ def evaluate_vs_minimax(
     """Realiza um teste cego (epsilon=0) contra o agente clássico."""
     policy_net.eval()
     wins = 0
-    classical_agent.difficulty = "hard" if last_winrate < 0.6 else "very_hard"
-    classical_agent.depth = 4
+    classical_agent.difficulty = "normal" if last_winrate < 0.7 else "hard"
 
     for _ in range(num_games):
         state = env.reset().to(device)
@@ -47,11 +47,24 @@ def evaluate_vs_minimax(
                 break
 
             with torch.no_grad():
-                q_values = policy_net(state)
-                q_values = (
-                    q_values + (torch.FloatTensor(valid_mask).to(device) - 1.0) * 1e9
-                )
-                action = q_values.argmax().item()
+                best_action = None
+                best_score = -float('inf')
+                valid_moves = OthelloLogic.get_valid_moves(env.board, 1)
+                
+                # Testar cada jogada possível
+                for move in valid_moves:
+                    # Simular a jogada num tabuleiro imaginário
+                    next_board = OthelloLogic.simulate_move(env.board, 1, move[0], move[1])
+                    # Converter o resultado para NNUE e avaliar
+                    obs = board_to_nnue_format(next_board, 1).to(device)
+                    score = policy_net(obs).item()
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_action = move
+                
+                # O ambiente ainda precisa do índice 0-63
+                action = best_action[1] * 8 + best_action[0]
 
             state, _, done = env.step(action, player_id=1)
             state = state.to(device)
@@ -83,8 +96,20 @@ def evaluate_vs_minimax(
     policy_net.train()
     return wins / num_games
 
+def board_to_nnue_format(board, player_id):
+    """Converte o tabuleiro 8x8 num tensor de 128 posições (Minhas peças vs Inimigo)."""
+    nnue_obs = np.zeros(128, dtype=np.float32)
+    opponent_id = 3 - player_id
+    for y in range(8):
+        for x in range(8):
+            piece = board[y][x]
+            if piece == player_id:
+                nnue_obs[y * 8 + x] = 1.0
+            elif piece == opponent_id:
+                nnue_obs[(y * 8 + x) + 64] = 1.0
+    return torch.FloatTensor(nnue_obs)
 
-def train(episodes: int = 50000):
+def train(episodes: int = 2000):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     policy_net = OthelloNet().to(device)
     target_net = OthelloNet().to(device)
@@ -97,7 +122,6 @@ def train(episodes: int = 50000):
     win_history = deque(maxlen=100)
     best_test_winrate = -1.0
     last_test_winrate = 0
-
     os.makedirs("models", exist_ok=True)
     epsilon = 0.9
     eps_min = 0.05
@@ -107,27 +131,43 @@ def train(episodes: int = 50000):
 
     print(f"Treino iniciado no {device}...")
     start_time = time.time()
+    start_time_program = time.time()
 
     for ep in range(episodes):
         state = env.reset().to(device)
         done = False
-        is_hard_mode = ep % 5 == 0
+        if ep<2000:
+            opponent_type = "dummy"
+        elif ep<5000:
+            opponent_type = "mixed"
+        else:
+            opponent_type = "minimax"
 
         while not done:
             valid_mask = env.get_valid_mask(player_id=1)
             if not any(valid_mask):
                 break
 
+            valid_moves = OthelloLogic.get_valid_moves(env.board, 1)
+            
             if random.random() < epsilon:
-                action = random.choice([i for i, m in enumerate(valid_mask) if m == 1])
+                # Escolhe uma jogada aleatória das válidas
+                move = random.choice(valid_moves)
+                action = move[1] * 8 + move[0]
             else:
                 with torch.no_grad():
-                    q_values = policy_net(state)
-                    q_values = (
-                        q_values
-                        + (torch.FloatTensor(valid_mask).to(device) - 1.0) * 1e9
-                    )
-                    action = q_values.argmax().item()
+                    best_action = None
+                    best_score = -float('inf')
+                    for move in valid_moves:
+                        next_board = OthelloLogic.simulate_move(env.board, 1, move[0], move[1])
+                        obs = board_to_nnue_format(next_board, 1).to(device)
+                        score = policy_net(obs).item()
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_action = move
+                            
+                    action = best_action[1] * 8 + best_action[0]
 
             next_state, reward, done = env.step(action, player_id=1)
 
@@ -142,11 +182,26 @@ def train(episodes: int = 50000):
             if not done:
                 opp_mask = env.get_valid_mask(player_id=2)
                 if any(opp_mask):
-                    if is_hard_mode:
+                    if opponent_type == "minimax":
                         _, move = classical_agent.minmax(
                             env.board, 2, float("-inf"), float("inf"), True, 2
                         )
                         opp_idx = move[1] * 8 + move[0]
+
+                    if opponent_type == "mixed":
+                        if random.random() < 0.5:
+                            _, move = classical_agent.minmax(
+                                env.board, 2, float("-inf"), float("inf"), True, 2
+                            )
+                            opp_idx = move[1] * 8 + move[0]
+                        else:
+                            opp_idx = random.choice(
+                                [i for i, m in enumerate(opp_mask) if m == 1]
+                            )
+                    elif opponent_type == "dummy":
+                        opp_idx = random.choice(
+                            [i for i, m in enumerate(opp_mask) if m == 1]
+                        )
                     else:
                         opp_idx = random.choice(
                             [i for i, m in enumerate(opp_mask) if m == 1]
@@ -154,36 +209,28 @@ def train(episodes: int = 50000):
                     next_state, _, done = env.step(opp_idx, player_id=2)
                     next_state = next_state.to(device)
 
-            next_mask = env.get_valid_mask(player_id=1)
-            memory.push(state, action, reward, next_state, next_mask, done)
-            state = next_state
+            state_nnue = board_to_nnue_format(env.board, 1).to(device)
+            
+            next_state_nnue = board_to_nnue_format(env.board, 1).to(device)
+            
+            memory.push(state_nnue, None, reward, next_state_nnue, None, done)
 
             if len(memory.buffer) > batch_size:
                 transitions = memory.sample(batch_size)
-                b_state = torch.cat([t[0] for t in transitions])
-                b_action = torch.tensor(
-                    [t[1] for t in transitions], device=device
-                ).unsqueeze(1)
-                b_reward = torch.tensor(
-                    [t[2] for t in transitions], device=device, dtype=torch.float32
-                )
-                b_next_state = torch.cat([t[3] for t in transitions])
-                b_next_mask = (
-                    torch.from_numpy(np.array([t[4] for t in transitions]))
-                    .to(device)
-                    .float()
-                )
-                b_done = torch.tensor(
-                    [t[5] for t in transitions], device=device, dtype=torch.float32
-                )
+                
+                b_state = torch.stack([t[0] for t in transitions]) 
+                b_reward = torch.tensor([t[2] for t in transitions], device=device, dtype=torch.float32)
+                b_next_state = torch.stack([t[3] for t in transitions])
+                b_done = torch.tensor([t[5] for t in transitions], device=device, dtype=torch.float32)
 
-                current_q = policy_net(b_state).gather(1, b_action)
+                current_v = policy_net(b_state).squeeze() # Output: [batch_size]
+
                 with torch.no_grad():
-                    masked_next_q = target_net(b_next_state) + (b_next_mask - 1.0) * 1e9
-                    max_next_q = masked_next_q.max(1)[0]
-                    target_q = b_reward + (gamma * max_next_q * (1 - b_done))
+                    next_v = target_net(b_next_state).squeeze()
+                    target_v = b_reward + (gamma * next_v * (1 - b_done))
 
-                loss = F.smooth_l1_loss(current_q.squeeze(), target_q)
+                loss = F.smooth_l1_loss(current_v, target_v)
+                
                 optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 1.0)
@@ -219,8 +266,13 @@ def train(episodes: int = 50000):
         if (ep + 1) % 100 == 0:
             curr_time = time.time()
             win_rate = sum(win_history) / len(win_history)
+            left_time=((curr_time - start_time_program)/(ep+1)*(episodes-(ep+1)))*1.2
+            hours = int(left_time // 3600)
+            minutes = int((left_time % 3600) // 60)
+            seconds = int(left_time % 60)
+
             print(
-                f"Ep {ep + 1}/{episodes} | Loss: {loss.item():.4f} | WinRate: {win_rate:.2f} | Eps: {epsilon:.2f} | Time: {curr_time - start_time:.1f}s"
+                f"Ep {ep + 1}/{episodes} | Loss: {loss.item():.4f} | WinRate: {win_rate:.2f} | Eps: {epsilon:.2f} | Time: {curr_time - start_time:.1f}s | Est: {hours:02d}h {minutes:02d}m {seconds:02d}s"
             )
             start_time = curr_time
 
@@ -228,4 +280,6 @@ def train(episodes: int = 50000):
 
 
 if __name__ == "__main__":
-    train(episodes=50000)
+    train(episodes=10000)
+    # os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+
