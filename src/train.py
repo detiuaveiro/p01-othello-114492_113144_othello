@@ -220,8 +220,23 @@ def train(episodes: int = 50000):
             win_history.append(1 if p2_c > p1_c else 0)
 
         epsilon = max(eps_min, epsilon - eps_decay)
+
         if (ep + 1) % 500 == 0:
             target_net.load_state_dict(policy_net.state_dict())
+            win_rate = sum(win_history) / 100
+            if win_rate < 0.35:  # Recovery se estiver a perder muito
+                epsilon = min(0.5, epsilon + 0.15)
+                print(
+                    f"-- RECOVERY: WinRate {win_rate:.2f} baixa, Eps subiu para {epsilon:.2f} --"
+                )
+        
+        if (ep + 1) % 100 == 0:
+            curr_time = time.time()
+            win_rate = sum(win_history) / len(win_history)
+            print(
+                f"Ep {ep + 1}/{episodes} | Loss: {loss.item():.4f} | WinRate: {win_rate:.2f} | Eps: {epsilon:.2f} | Time: {curr_time - start_time:.1f}s"
+            )
+            start_time = curr_time
 
 if __name__ == "__main__":
     train(episodes=50000)
