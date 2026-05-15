@@ -26,7 +26,7 @@ class AIAgent(BaseOthelloAgent):
     async def deliberate(self, board, valid_actions):
 
         # Add a tiny delay so humans can watch the game unfold
-        await asyncio.sleep(0.5)
+        #await asyncio.sleep(0.5)
         obs = np.array(board)
         if self.player_id == 1:
             # Inverter: onde é 1 vira 2, onde é 2 vira 1
