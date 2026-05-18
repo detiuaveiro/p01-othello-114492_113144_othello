@@ -352,6 +352,7 @@ class OthelloServer:
                             "type": "update",
                             "board": self.board,
                             "current_turn": self.current_turn,
+                            "first_player": self.first_player_this_round,
                             "valid_actions": self.get_valid_actions(self.current_turn)
                             if self.running
                             else [],

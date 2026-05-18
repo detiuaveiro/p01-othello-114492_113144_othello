@@ -21,12 +21,20 @@ class App {
       if (data.type === "update") {
         this.state = data;
 
+        const firstPlayer = data.first_player || 1; 
+        const isP1Black = firstPlayer === 1;
+        
+        const p1Color = isP1Black ? "Black" : "White";
+        const p2Color = isP1Black ? "White" : "Black";
+
         document.getElementById("p1-status").innerText = data.p1_connected
-          ? "Player 1 (Black)"
+          ? `Player 1 (${p1Color})`
           : "Player 1 (Disconnected)";
+          
         document.getElementById("p2-status").innerText = data.p2_connected
-          ? "Player 2 (White)"
+          ? `Player 2 (${p2Color})`
           : "Player 2 (Disconnected)";
+        // -------------------------------------------------------------------
 
         document.getElementById("p1-discs").innerText = data.disc_counts[1];
         document.getElementById("p2-discs").innerText = data.disc_counts[2];
@@ -36,8 +44,9 @@ class App {
         const turnText = document.getElementById("turn-indicator");
         if (data.p1_connected && data.p2_connected) {
           turnText.innerText = `Current Turn: Player ${data.current_turn}`;
+          // As cores do texto de turno continuam fiéis ao ID do jogador
           turnText.style.color =
-            data.current_turn === 1 ? "#2E3440" : "#ECEFF4";
+            data.current_turn === firstPlayer ? "#2E3440" : "#ECEFF4";
         } else {
           turnText.innerText = "Waiting for agents...";
           turnText.style.color = "#D8DEE9";
@@ -72,6 +81,7 @@ class App {
 
     const board = this.state.board;
     const validActions = this.state.valid_actions || [];
+    const firstPlayer = this.state.first_player || 1; // Sabe quem tem as peças pretas
 
     for (let y = 0; y < this.size; y++) {
       for (let x = 0; x < this.size; x++) {
@@ -80,14 +90,17 @@ class App {
 
         // Draw Discs
         if (board[y][x] !== 0) {
+          // Se o número no tabuleiro for igual ao firstPlayer, a peça é preta
+          const isBlackPiece = board[y][x] === firstPlayer; 
+            
           this.ctx.beginPath();
           this.ctx.arc(cx, cy, this.cellSize / 2.5, 0, Math.PI * 2);
-          this.ctx.fillStyle = board[y][x] === 1 ? "#2E3440" : "#ECEFF4"; // Black or White
+          this.ctx.fillStyle = isBlackPiece ? "#2E3440" : "#ECEFF4";
           this.ctx.fill();
 
           // 3D Rim effect
           this.ctx.lineWidth = 3;
-          this.ctx.strokeStyle = board[y][x] === 1 ? "#1b1e25" : "#D8DEE9";
+          this.ctx.strokeStyle = isBlackPiece ? "#1b1e25" : "#D8DEE9";
           this.ctx.stroke();
         }
 
@@ -96,10 +109,11 @@ class App {
           (action) => action[0] === x && action[1] === y,
         );
         if (isValid) {
+          const isCurrentTurnBlack = this.state.current_turn === firstPlayer;
+            
           this.ctx.beginPath();
           this.ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-          this.ctx.fillStyle =
-            this.state.current_turn === 1
+          this.ctx.fillStyle = isCurrentTurnBlack
               ? "rgba(46,52,64,0.3)"
               : "rgba(236,239,244,0.5)";
           this.ctx.fill();
