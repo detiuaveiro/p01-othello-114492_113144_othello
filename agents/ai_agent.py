@@ -95,7 +95,7 @@ if __name__ == "__main__":
         "-m",
         "--model",
         type=str,
-        default="models/othello_best_strategic100.pth",
+        default="models/othello_best_strategic.pth",
         help="Agent model path",
     )
     args = parser.parse_args()
