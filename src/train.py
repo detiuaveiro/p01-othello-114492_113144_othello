@@ -67,7 +67,8 @@ def run_full_benchmark(policy_net, env, classical_agent, device, num_games_per_c
                         classical_agent.set_difficulty(mode)
                         # No modo treino, não deixes a profundidade passar de 4 para o Hard no benchmark
                         # senão o tempo de treino explode
-                        if mode == "h": classical_agent.depth = 4 
+                        if mode == "h":
+                            classical_agent.depth = 4 
                         
                         classical_agent.transposition_table = {}
                         _, move = classical_agent.minmax(env.board, classical_agent.depth, -float('inf'), float('inf'), True, opp_p, classical_agent.use_mobility)

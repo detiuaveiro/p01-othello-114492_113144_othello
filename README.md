@@ -1,89 +1,62 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/64wEcMIk)
-# <img src="frontend/favicon.svg" alt="logo" width="128" height="128" align="middle"> SI2 - Othello
+# Intelligent Systems II: Autonomous Othello Agents
 
-Othello is a classic strategy board game played on an 8x8 grid. The game involves two players, Black and White, who take turns placing their discs on the board. The primary objective is to out-position your opponent by "sandwiching" their pieces between your own, which allows you to flip them to your color. The player with the most discs of their color on the board when no more moves can be made wins the game.
+**Authors:** [Teu Nome] (NMEC) & [Nome do Colega] (NMEC)
 
-This project provides a simulation environment for Othello, featuring a backend server that manages the game state, a frontend for visualization, and a framework for developing autonomous agents. The backend handles the game logic, enforces rules, and communicates with connected agents via WebSockets, while the frontend provides a real-time view of the board and match statistics.
+## 1. Project Overview & Execution Instructions
 
-## Game Rules
+*(Breve descrição do projeto e como correr)*
+To run our agents against the simulation server:
 
-The game is played on an 8x8 board. It starts with four discs placed in a square in the center of the grid: two white and two black. Black always moves first.
+1. Start the backend server: `docker compose up`
+2. Install requirements: `pip install -r requirements.txt`
+3. Run the Evolved CNN Agent: `python -m agents.ai_agent2`
+4. Run the NNUE Agent: `python -m agents.[nome_do_agente_do_colega]`
+5. Run the Classical Agent: `python -m agents.classical_agent -d h`
 
-- **Objective:** Have more discs of your color than your opponent when the board is full or neither player can move.
-- **Valid Move:** A move is made by placing a disc of your color on an empty square that "outflanks" one or more opponent discs. "Outflanking" means having a disc of your color at each end of a line (horizontal, vertical, or diagonal) of one or more contiguous opponent discs.
-- **Flipping:** All outflanked opponent discs are flipped to your color.
-- **Skipping Turns:** If a player has no valid moves, their turn is skipped. If neither player can move, the game ends.
+## 2. Solution Architectures
 
-### State and Actions Example
+Our group decided to explore and contrast two distinct modern Artificial Intelligence approaches against a highly optimized classical baseline.
 
-The game state is communicated to agents as a JSON object:
-```json
-{
-  "type": "state",
-  "board": [[0, 0, ...], ...],
-  "current_turn": 1,
-  "valid_actions": [[2, 3], [3, 2], [4, 5], [5, 4]]
-}
-```
-An action is a simple move command:
-```json
-{
-  "action": "move",
-  "x": 2,
-  "y": 3
-}
-```
+### 2.1. The Classical Baseline (Minimax + Numba)
 
-## Setup
+To establish a robust teacher and benchmark, we built a Minimax algorithm with Alpha-Beta pruning.
 
-The simulation can be launched using Docker Compose, while agents are typically executed locally.
+* **Performance Optimization:** Python's native execution was too slow for deep searches. We flattened the 2D board into a 1D array and compiled the core game logic to machine code using **Numba (`@njit`)**, achieving a ~50x speedup.
+* **Heuristics & Move Ordering:** Evaluates positional weights and dynamic mobility, heavily optimizing the Alpha-Beta cutoffs by testing corner moves first.
 
-1. **Start the Simulation**:
-   ```bash
-   docker compose up
-   ```
-   This will start the backend server (port 8765) and the frontend viewer (port 8080).
+### 2.2. Approach A: Neuroevolutionary CNN (Agent 1)
 
-2. **Execute Agents**:
-   Create and activate a virtual environment, install the requirements, and run your agents:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   python agents/dummy_agent.py
-   ```
+*(A tua parte)*
+Initially, we experimented with Deep Q-Learning (DQN). However, the sparse reward nature of Othello led to Q-value divergence (gradient explosions). We pivoted to a **Generational Genetic Algorithm (Neuroevolution)**.
 
-## Project Structure
+* **Architecture:** A Convolutional Neural Network (CNN) designed to capture spatial geometries (like 2x2 stable blocks and edges).
+* **Evolutionary Strategy:** A population of 60 agents trained via multiprocessing. Fitness was determined by match victories and disc margins. We applied **Adaptive Mutation Rate** and **Elitism** to escape local optima.
 
-- `backend/`: Python server using `websockets` that handles game logic and state broadcasting.
-- `frontend/`: HTML5 Canvas-based visualization for monitoring the game.
-- `agents/`: Framework and implementations for autonomous agents.
-  - `base_agent.py`: Abstract base class for all agents.
-  - `dummy_agent.py`: Simple agent that makes random moves.
-  - `manual_agent.py`: Agent for manual control via terminal input.
-- `compose.yml`: Docker Compose configuration for the full stack.
+### 2.3. Approach B: NNUE (Agent 2)
 
-## Development
+*(A parte do teu colega)* a
 
-To develop a new agent, inherit from `BaseOthelloAgent` and implement the `deliberate` method.
+* Explain the Efficiently Updatable Neural Network.
+* Why it evaluates board states faster than the CNN.
+* How it was trained.
 
-```python
-from agents.base_agent import BaseOthelloAgent
+## 3. Engineering Challenges & Solutions
 
-class MyAgent(BaseOthelloAgent):
-    async def deliberate(self, board, valid_actions):
-        # Your strategy here
-        if valid_actions:
-            return valid_actions[0]
-        return None
-```
+*(Aqui é onde ganhas os pontos de complexidade)*
+During the development of the Neuroevolutionary agent, we overcame several critical hurdles:
 
-Refer to the [API Documentation](https://mariolpantunes.github.io/si2-othello/) for more details.
+1. **Memory Exhaustion (OOM):** Maintaining 60 neural networks and Minimax transposition tables in RAM caused system crashes. We solved this by implementing aggressive Garbage Collection (`gc.collect()`) and clearing classical caches per match.
+2. **Deterministic Overfitting:** The CNN initially achieved a 100% win rate in training but failed in testing. It had memorized specific sequences. We fixed this by introducing **"Chaotic Openings"** (forcing random initial moves during training) to ensure true spatial generalization.
 
-## Authors
+## 4. Benchmark & Results
 
-* **Mário Antunes** - [mariolpantunes](https://github.com/mariolpantunes)
+We developed a TCEC-style benchmark using random openings to evaluate the agents fairly.
 
-## License
+| Agent | Vs Random | Vs Minimax (Normal) | Vs Minimax (Hard) |
+| :--- | :--- | :--- | :--- |
+| **Evo CNN** | 100% | XX% | XX% |
+| **NNUE** | 100% | XX% | XX% |
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 5. Conclusion
+
+*(Conclusão sobre qual abordagem foi melhor e porquê. Provavelmente dirão que a NNUE é superior em tempo de inferência, mas que a CNN demonstrou forte controlo espacial).*

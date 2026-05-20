@@ -6,7 +6,6 @@ import os
 from typing import List, Tuple
 from agents.base_agent import BaseOthelloAgent
 from src.network import OthelloNet
-
 class AIAgent(BaseOthelloAgent):
     """
     AI Agent using a Neuroevolved Neural Network.
@@ -34,7 +33,7 @@ class AIAgent(BaseOthelloAgent):
         Processes the board and picks the best move using the evolved weights.
         """
         # Small sleep so we can follow the game on the frontend
-        await asyncio.sleep(0.1)
+        #await asyncio.sleep(0.5)
 
         # 1. Perspective Normalization (CRUCIAL)
         # This matches the 'get_state' logic from the evolution training

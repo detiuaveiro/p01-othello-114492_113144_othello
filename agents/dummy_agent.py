@@ -28,7 +28,7 @@ class DummyOthelloAgent(BaseOthelloAgent):
             The chosen move $(x, y)$ or None.
         """
         # Add a tiny delay so humans can watch the game unfold
-        await asyncio.sleep(0.5)
+        #await asyncio.sleep(0.5)
 
         if not valid_actions:
             return (

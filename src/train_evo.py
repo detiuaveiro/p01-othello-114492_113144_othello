@@ -13,7 +13,7 @@ class EvolutionTrainer:
     Trainer for Othello agents using Neuroevolution.
     Includes Difficulty Weighting, Adaptive Mutation, and Seed Loading.
     """
-    def __init__(self, pop_size: int = 20, mutation_rate: float = 0.15):
+    def __init__(self, pop_size: int = 30, mutation_rate: float = 0.15):
         self.pop_size = pop_size
         self.base_mutation_rate = mutation_rate
         self.current_mutation_rate = mutation_rate
@@ -39,12 +39,11 @@ class EvolutionTrainer:
             print("[!] No seed model found. Starting with random weights.")
 
     @torch.no_grad()
-    def get_fitness(self, model: torch.nn.Module, generation: int):
-        """Evaluates an agent and returns (weighted_fitness, raw_fitness)."""
+    def get_fitness(self, model: torch.nn.Module, generation: int) -> tuple[float, float]:
+        total_fitness = 0.0
         model.eval()
-        raw_fitness = 0.0
         
-        # Difficulty Curriculum and Weights
+        # Difficulty and Weights
         if generation < 15:
             mode, depth, weight = "random", 1, 0.6
         elif generation < 40:
@@ -54,27 +53,28 @@ class EvolutionTrainer:
 
         self.teacher.set_difficulty(mode)
 
-        # Evaluate as both Player 1 and Player 2
-        for ai_p in [1, 2]:
+        # Focus on Player 2 (4 games as White, 1 as Black)
+        match_configs = [2, 2, 2, 2, 1] 
+
+        for ai_p in match_configs:
             opp_p = 3 - ai_p
             self.env.reset()
             done = False
             curr_p = 1
-            self.teacher.transposition_table = {} # Aggressive RAM management
+            self.teacher.transposition_table = {} 
             
             while not done:
                 mask = self.env.get_valid_mask(curr_p)
                 if not any(mask):
                     curr_p = 3 - curr_p
-                    if not any(self.env.get_valid_mask(curr_p)):
-                        break
+                    if not any(self.env.get_valid_mask(curr_p)): break
                     continue
                 
                 if curr_p == ai_p:
                     obs = self.env.get_state(ai_p)
                     q = model(obs)
                     q_vals = q.squeeze().numpy()
-                    q_vals[mask == 0] = -1e8
+                    q_vals[mask == 0] = -1e7
                     action = int(np.argmax(q_vals))
                     self.env.step(action, ai_p)
                 else:
@@ -85,11 +85,26 @@ class EvolutionTrainer:
                     self.env.step(move[1] * 8 + move[0], opp_p)
                 curr_p = 3 - curr_p
 
-            p1_c, p2_c = sum(row.count(1) for row in self.env.board), sum(row.count(2) for row in self.env.board)
+            # --- CÁLCULO FINAL DA FITNESS DO JOGO ---
+            p1_c = sum(row.count(1) for row in self.env.board)
+            p2_c = sum(row.count(2) for row in self.env.board)
             my_s, opp_s = (p1_c, p2_c) if ai_p == 1 else (p2_c, p1_c)
-            raw_fitness += (100 + (my_s - opp_s)) if my_s > opp_s else (my_s - opp_s)
+            
+            # 1. Bónus de Vitória (maior para Brancas para equilibrar)
+            win_bonus = 150 if ai_p == 2 else 100
+            if my_s > opp_s:
+                total_fitness += win_bonus + (my_s - opp_s)
+            else:
+                total_fitness += (my_s - opp_s)
 
-        return (raw_fitness * weight), raw_fitness
+            # 2. Bónus Geométrico (Cantos são cruciais no Othello)
+            corners = [(0,0), (0,7), (7,0), (7,7)]
+            for cy, cx in corners:
+                if self.env.board[cy][cx] == ai_p:
+                    total_fitness += 50
+
+        return (total_fitness * weight), total_fitness
+    
 
     def mutate_inplace(self, model: torch.nn.Module, intensity: float = 1.0):
         """Applies Gaussian mutation to the network weights."""
@@ -161,5 +176,5 @@ class EvolutionTrainer:
             print("[+] Best weights remain in models/evo_best.pth. Final state saved.")
 
 if __name__ == "__main__":
-    trainer = EvolutionTrainer(pop_size=20, mutation_rate=0.15)
+    trainer = EvolutionTrainer(pop_size=50, mutation_rate=0.15)
     trainer.train(generations=1000)

@@ -35,6 +35,7 @@ class ClassicalAgent(BaseOthelloAgent):
 
     async def deliberate(self, board: List[List[int]], valid_actions: List[List[int]]) -> Tuple[int, int]:
         """Entry point for move selection."""
+        #await asyncio.sleep(0.5)
         empty_cells = sum(row.count(0) for row in board)
         current_depth = self.depth
 
@@ -113,3 +114,22 @@ class ClassicalAgent(BaseOthelloAgent):
 
         self.transposition_table[state_key] = res
         return res
+    
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Classical Othello Agent")
+    parser.add_argument(
+        "-d", "--difficulty", 
+        choices=["e", "easy", "n", "normal", "h", "hard", "vh", "very_hard"], 
+        default="n",
+        help="Difficulty level"
+    )
+    args = parser.parse_args()
+
+    # Cria o agente
+    agent = ClassicalAgent(difficulty=args.difficulty)
+    
+    # Inicia o loop asíncrono para ligar ao servidor
+    try:
+        asyncio.run(agent.run())
+    except KeyboardInterrupt:
+        print("\nAgent stopped by user.")
