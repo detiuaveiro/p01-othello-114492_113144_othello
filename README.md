@@ -16,7 +16,7 @@ To run our agents against the simulation server, follow these instructions:
    pip install -r requirements.txt
    ```
 3. **Run the Main Agent (NNUE-DQN):** `python -m agents.ai_agent`
-4. **Run the Classical Teacher:** `python -m agents.classical_agent -d h`
+4. **Run the Classical Teacher:** `python -m agents.classical_agent`
 
 ---
 
