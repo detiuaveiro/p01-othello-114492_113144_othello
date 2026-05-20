@@ -8,7 +8,7 @@ from agents.classical_agent import ClassicalAgent
 from agents.utils import OthelloLogic
 import time
 
-def run_benchmark(model_path="models/evo_best.pth", num_openings=5):
+def run_benchmark(model_path="models/othello_brain_final.pth", num_openings=5):
     print("="*60)
     print("INICIANDO BENCHMARK OTHELLO (TCEC Style)")
     print(f"Modelo: {model_path}")

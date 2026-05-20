@@ -1,3 +1,5 @@
+import argparse
+
 import torch
 from torch import nn
 import torch.optim as optim
@@ -138,7 +140,7 @@ def board_to_nnue_format(board_1d, player_id):
     return torch.FloatTensor(nnue_obs)
 
 
-def train(episodes: int = 2000):
+def train(episodes: int = 5000, win_rate_threshold: float = 0.6, use_threshold: bool = False):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     policy_net = OthelloNet().to(device)
     target_net = OthelloNet().to(device)
@@ -332,19 +334,32 @@ def train(episodes: int = 2000):
         if (ep + 1) % 100 == 0:
             curr_time = time.time()
             win_rate = sum(win_history) / len(win_history)
-            if (win_rate>0.63 or (ep + 1) % 1800) and FASE<3:
-                nomes_fases = {
-                    1: "DUMMY (Aleatório)", 
-                    2: "MIXED (Misto)", 
-                    3: "MINIMAX (Árvore de Decisão)"
-                }
-                
-                fase_antiga = nomes_fases[FASE]
-                FASE += 1
-                fase_nova = nomes_fases[FASE]
-                
-                print(f"fase_antiga: {fase_antiga}")
-                print(f"fase_nova: {fase_nova}")
+            if FASE < 3:
+                passar_fase = False
+                if use_threshold:
+                    if win_rate > win_rate_threshold:
+                        passar_fase = True
+                else:
+                    terco = episodes // 3
+                    if FASE == 1 and ep >= terco:
+                        passar_fase = True
+                    elif FASE == 2 and ep >= (2 * terco):
+                        passar_fase = True
+
+                if passar_fase:
+                    nomes_fases = {
+                        1: "DUMMY (Aleatório)", 
+                        2: "MIXED (Misto)", 
+                        3: "MINIMAX (Árvore de Decisão)"
+                    }
+                    
+                    fase_antiga = nomes_fases[FASE]
+                    FASE += 1
+                    fase_nova = nomes_fases[FASE]
+                    
+                    print(f"fase_antiga: {fase_antiga}")
+                    print(f"fase_nova: {fase_nova}")
+
             duration_time=curr_time - start_time
             left_time=(duration_time / 100*(episodes-(ep+1)))
             hours = int(left_time // 3600)
@@ -363,4 +378,32 @@ def train(episodes: int = 2000):
     torch.save(policy_net.state_dict(), "models/othello_brain_final.pth")
 
 if __name__ == "__main__":
-    train(episodes=10000)
+    parser = argparse.ArgumentParser(description="Treino do Agente de Inteligência Artificial - Othello NNUE")
+    
+    parser.add_argument(
+        "-e", "--episodes",
+        type=int,
+        default=5000,
+        help="Número total de episódios para o treino (default: 5000)"
+    )
+    
+    parser.add_argument(
+        "-w", "--win-rate-threshold",
+        type=float,
+        default=0.7,
+        help="Taxa de vitória (0.0 a 1.0) necessária para passar de fase (default: 0.6)"
+    )
+    
+    parser.add_argument(
+        "-t", "--use-threshold",
+        action="store_true",
+        help="Se for chamado, usa o Win Rate Threshold para avançar de fase (Curriculum Dinâmico). (default: False)"
+    )
+
+    args = parser.parse_args()
+    
+    train(
+        episodes=args.episodes,
+        win_rate_threshold=args.win_rate_threshold,
+        use_threshold=args.use_threshold
+    )
