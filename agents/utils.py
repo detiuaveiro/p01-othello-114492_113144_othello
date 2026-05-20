@@ -115,7 +115,49 @@ def evaluate_board(board, player_id, use_mobility):
 
     return score
 
-# Classe "wrapper" opcional para não partires o resto do teu código
+@njit
+def extract_features_njit(board_1d, player_id):
+    """Gera as 132 features inteiramente em C/Numba, sem ir ao Python."""
+    nnue_obs = np.zeros(132, dtype=np.float32)
+    opponent_id = 3 - player_id
+    
+    # 1. Mapa de Peças (Loops simples no Numba são mais rápidos que máscaras do Numpy)
+    for i in range(64):
+        if board_1d[i] == player_id:
+            nnue_obs[i] = 1.0
+        elif board_1d[i] == opponent_id:
+            nnue_obs[i+64] = 1.0
+            
+    # 2. Cantos
+    corners = np.array([0, 7, 56, 63], dtype=np.int8)
+    my_corners, opp_corners = 0, 0
+    for c in corners:
+        if board_1d[c] == player_id: my_corners += 1
+        elif board_1d[c] == opponent_id: opp_corners += 1
+    nnue_obs[128] = (my_corners - opp_corners) / 4.0
+    
+    # 3. X-Squares
+    x_squares = np.array([9, 14, 49, 54], dtype=np.int8)
+    my_x = 0
+    for x in x_squares:
+        if board_1d[x] == player_id: my_x += 1
+    nnue_obs[129] = -my_x / 4.0
+    
+    # 4. Mobilidade (Como isto já está no Numba, chamar o get_valid_moves é instantâneo!)
+    my_moves = len(get_valid_moves(board_1d, player_id))
+    opp_moves = len(get_valid_moves(board_1d, opponent_id))
+    total_moves = max(my_moves + opp_moves, 1)
+    nnue_obs[130] = (my_moves - opp_moves) / total_moves
+    
+    # 5. Centro
+    center = np.array([18, 19, 20, 21, 26, 27, 28, 29, 34, 35, 36, 37, 42, 43, 44, 45], dtype=np.int8)
+    my_center = 0
+    for c in center:
+        if board_1d[c] == player_id: my_center += 1
+    nnue_obs[131] = my_center / 16.0
+    
+    return nnue_obs
+
 class OthelloLogic:
     @staticmethod
     def get_flips(board, player_id, x, y):
@@ -132,3 +174,7 @@ class OthelloLogic:
     @staticmethod
     def evaluate_board(board, player_id, use_mobility=False):
         return evaluate_board(board, player_id, use_mobility)
+
+    @staticmethod
+    def extract_features(board_1d, player_id):
+        return extract_features_njit(board_1d, player_id)

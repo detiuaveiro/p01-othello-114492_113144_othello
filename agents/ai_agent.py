@@ -24,22 +24,38 @@ class AIAgent(BaseOthelloAgent):
             print("Aviso: Modelo não encontrado. O agente vai jogar de forma aleatória.")
 
     def board_to_nnue_format(self, board_1d, player_id):
-        """
-        Converte o array Numpy 1D (64 posições) num tensor de 128 posições.
-        Otimizado com Numpy Vectorization (Sem ciclos 'for' = muito mais rápido).
-        """
-        # Inicializar um array de 128 zeros
-        nnue_obs = np.zeros(128, dtype=np.float32)
+        """Converte o tabuleiro 1D num tensor de 132 posições com features extra."""
+        nnue_obs = np.zeros(132, dtype=np.float32)
         opponent_id = 3 - player_id
         
-        # Preenchimento em bloco usando máscaras do Numpy (Instantâneo)
-        # As primeiras 64 posições ficam com 1.0 onde temos as nossas peças
+        # 1. Mapa de peças (128 posições)
         nnue_obs[:64][board_1d == player_id] = 1.0
+        nnue_obs[64:128][board_1d == opponent_id] = 1.0
         
-        # As últimas 64 posições ficam com 1.0 onde o inimigo tem peças
-        nnue_obs[64:][board_1d == opponent_id] = 1.0
+        # 2. Features Estratégicas (4 posições)
+        
+        # A) Domínio de Cantos (Índices: 0=Top-Esq, 7=Top-Dir, 56=Bot-Esq, 63=Bot-Dir)
+        corners = np.array([0, 7, 56, 63])
+        my_corners = np.count_nonzero(board_1d[corners] == player_id)
+        opp_corners = np.count_nonzero(board_1d[corners] == opponent_id)
+        nnue_obs[128] = (my_corners - opp_corners) / 4.0
+        
+        # B) Risco de X-Squares (Casas adjacentes aos cantos na diagonal)
+        x_squares = np.array([9, 14, 49, 54])
+        my_x = np.count_nonzero(board_1d[x_squares] == player_id)
+        nnue_obs[129] = -my_x / 4.0  # Negativo porque ter peças aqui é mau
+        
+        # C) Mobilidade Relativa
+        my_moves = len(OthelloLogic.get_valid_moves(board_1d, player_id))
+        opp_moves = len(OthelloLogic.get_valid_moves(board_1d, opponent_id))
+        total_moves = max(my_moves + opp_moves, 1)
+        nnue_obs[130] = (my_moves - opp_moves) / total_moves
+        
+        # D) Controlo Central (As 16 casas centrais)
+        center = np.array([18, 19, 20, 21, 26, 27, 28, 29, 34, 35, 36, 37, 42, 43, 44, 45])
+        my_center = np.count_nonzero(board_1d[center] == player_id)
+        nnue_obs[131] = my_center / 16.0
                 
-        # Retorna o tensor com formato (1, 128) para simular o batch_size = 1
         return torch.FloatTensor(nnue_obs).unsqueeze(0)
 
     async def deliberate(self, board, valid_actions):
