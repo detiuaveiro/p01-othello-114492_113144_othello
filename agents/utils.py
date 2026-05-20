@@ -1,16 +1,5 @@
-class OthelloLogic:
-    SIZE = 8
-    DIRECTIONS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-    WEIGHTS = [
-            [100, -20, 10, 5, 5, 10, -20, 100],
-            [-20, -50, -2, -2, -2, -2, -50, -20],
-            [10, -2, 5, 1, 1, 5, -2, 10],
-            [5, -2, 1, 0, 0, 1, -2, 5],
-            [5, -2, 1, 0, 0, 1, -2, 5],
-            [10, -2, 5, 1, 1, 5, -2, 10],
-            [-20, -50, -2, -2, -2, -2, -50, -20],
-            [100, -20, 10, 5, 5, 10, -20, 100],
-        ]
+import numpy as np
+from numba import njit
 
 # 1. Converter Constantes para Numpy Arrays (O Numba precisa disto)
 DIRECTIONS = np.array([
@@ -184,19 +173,8 @@ class OthelloLogic:
         
     @staticmethod
     def evaluate_board(board, player_id, use_mobility=False):
-        opponent = 3 - player_id
-        score = 0
-        
-        for y in range(8):
-            for x in range(8):
-                if board[y][x] == player_id:
-                    score += OthelloLogic.WEIGHTS[y][x]
-                elif board[y][x] == opponent:
-                    score -= OthelloLogic.WEIGHTS[y][x]
-        if use_mobility:
-            my_moves = len(OthelloLogic.get_valid_moves(board, player_id))
-            opp_moves = len(OthelloLogic.get_valid_moves(board, opponent))
-            # No Othello, ter mais opções que o adversário é quase vitória garantida
-            score += 15 * (my_moves - opp_moves)
+        return evaluate_board(board, player_id, use_mobility)
 
-        return score
+    @staticmethod
+    def extract_features(board_1d, player_id):
+        return extract_features_njit(board_1d, player_id)

@@ -26,7 +26,7 @@ class ClassicalAgent(BaseOthelloAgent):
     def set_difficulty(self, difficulty: str):
         self.difficulty = difficulty
         if difficulty in ["normal", "n"]:
-            self.depth = 4
+            self.depth = 2
             self.use_mobility = False
         elif difficulty in ["hard", "h"]:
             self.depth = 6
@@ -41,30 +41,27 @@ class ClassicalAgent(BaseOthelloAgent):
     ) -> Tuple[int, int]:
         """
         Decision-making entry point. Selects the best move using Minimax.
-
-        Args:
-            board: Current 8x8 board state (0: empty, 1: black, 2: white).
-            valid_actions: List of available [x, y] move coordinates.
-
-        Returns:
-            A tuple (x, y) representing the chosen move.
         """
-        # Add a tiny delay so humans can watch the game unfold
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
 
-        empty_cells = sum(row.count(0) for row in board)
+        # 1. CONVERTER A LISTA PARA NUMPY 1D LOGO AQUI!
+        board_array = np.array(board, dtype=np.int8).flatten()
+
+        # 2. Usar o numpy para contar os zeros (em vez de fazer for row in board)
+        empty_cells = np.count_nonzero(board_array == 0)
         current_depth = self.depth
 
-        # Endgame Solver: If few moves remain, search until the end of the game
+        # Endgame Solver
         if self.difficulty in ["very_hard", "vh"] and empty_cells <= 12:
             current_depth = empty_cells
             print(f"[Endgame] Solving the last {empty_cells} positions.")
 
-        self.transposition_table = {}  # Clear cache for each new move to stay current
+        self.transposition_table = {}  # Clear cache for each new move
         start_t = time.time()
 
+        # 3. Passar o board_array (Numpy) em vez do board (Lista)
         score, move = self.minmax(
-            board,
+            board_array,
             depth=current_depth,
             alpha=float("-inf"),
             beta=float("inf"),
@@ -76,8 +73,11 @@ class ClassicalAgent(BaseOthelloAgent):
         elapsed = time.time() - start_t
         print(f"Move took {elapsed:.2f}s (Depth: {current_depth}, Mobility: {self.use_mobility})")
         
-        return tuple(move) if move else tuple(valid_actions[0])
-
+        if move is not None:
+            return (int(move[0]), int(move[1]))
+        else:
+            return valid_actions[0]
+    
     def minmax(
         self,
         board_array, # Agora recebe o Numpy array
@@ -88,25 +88,9 @@ class ClassicalAgent(BaseOthelloAgent):
         player_id: int,
         use_mobility: bool = False,
     ) -> Tuple[float, Optional[List[int]]]:
-        """
-        Recursive Minimax algorithm with Alpha-Beta pruning and move ordering.
-
-        Args:
-            board: 8x8 matrix representing the game state.
-            depth: Current remaining depth in the search tree.
-            alpha: The best value the maximizing player can guarantee (Best for Me).
-            beta: The best value the minimizing player can guarantee (Best for Opponent).
-            maximizing_player: True if it's the agent's turn to maximize the score.
-            player_id: The ID assigned to this agent (1 or 2).
-            use_mobility: Whether to use move count difference in the evaluation function.
         
-        Returns:
-            A tuple containing (evaluation_score, best_move_coordinates).
-        """
-        
-        # 1. Transposition Table Check (Cache)
-        board_tuple = tuple(tuple(row) for row in board)
-        state_key = (board_tuple, depth, maximizing_player)
+        # 1. Cache Check (MUITO MAIS RÁPIDO AGORA)
+        state_key = (board_array.tobytes(), depth, maximizing_player)
         if state_key in self.transposition_table:
             return self.transposition_table[state_key]
 
@@ -115,38 +99,37 @@ class ClassicalAgent(BaseOthelloAgent):
         
         valid_moves = OthelloLogic.get_valid_moves(board_array, current_p)
 
-        # Base case: reach depth limit or game over
-        if depth == 0 or not valid_moves:
-            return OthelloLogic.evaluate_board(board, player_id, use_mobility), None
+        if depth == 0 or len(valid_moves) == 0:
+            return OthelloLogic.evaluate_board(board_array, player_id, use_mobility), None
 
-        # 2. Move Ordering (Prioritize corners to trigger Alpha-Beta pruning faster)
-        valid_moves.sort(key=lambda m: m[0] in [0, 7] and m[1] in [0, 7], reverse=True)
+        # Ordenar (converter valid_moves temporariamente para lista para usar a key)
+        v_moves_list = list(valid_moves)
+        v_moves_list.sort(key=lambda m: m[0] in [0, 7] and m[1] in [0, 7], reverse=True)
 
         best_move = None
         if maximizing_player:
             max_eval = float("-inf")
-            for move in valid_moves:
-                new_board = OthelloLogic.simulate_move(board, current_p, move[0], move[1])
+            for move in v_moves_list:
+                new_board = OthelloLogic.simulate_move(board_array, current_p, move[0], move[1])
                 eval_score, _ = self.minmax(new_board, depth - 1, alpha, beta, False, player_id, use_mobility)
                 if eval_score > max_eval:
                     max_eval, best_move = eval_score, move
                 alpha = max(alpha, eval_score)
                 if beta <= alpha:
-                    break # Beta cut-off
+                    break 
             res = (max_eval, best_move)
         else:
             min_eval = float("inf")
-            for move in valid_moves:
-                new_board = OthelloLogic.simulate_move(board, current_p, move[0], move[1])
+            for move in v_moves_list:
+                new_board = OthelloLogic.simulate_move(board_array, current_p, move[0], move[1])
                 eval_score, _ = self.minmax(new_board, depth - 1, alpha, beta, True, player_id, use_mobility)
                 if eval_score < min_eval:
                     min_eval, best_move = eval_score, move
                 beta = min(beta, eval_score)
                 if beta <= alpha:
-                    break # Alpha cut-off
+                    break 
             res = (min_eval, best_move)
 
-        # Save result to cache before returning
         self.transposition_table[state_key] = res
         return res
 

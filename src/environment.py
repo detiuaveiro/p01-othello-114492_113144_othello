@@ -7,22 +7,19 @@ class OthelloEnv:
         self.reset()
 
     def reset(self):
-        """Reinicia o tabuleiro para o estado inicial."""
-        self.board = [[0] * 8 for _ in range(8)]
-        self.board[3][3], self.board[4][4] = 2, 2  # Branco
-        self.board[3][4], self.board[4][3] = 1, 1  # Preto
-        return self.get_state(player_id=1)
+        """Reinicia o tabuleiro para o estado inicial usando um array 1D (64 posições)."""
+        self.board = np.zeros(64, dtype=np.int8)
+        self.board[3 * 8 + 3] = 2  # Branco
+        self.board[4 * 8 + 4] = 2  # Branco
+        self.board[3 * 8 + 4] = 1  # Preto
+        self.board[4 * 8 + 3] = 1  # Preto
+        return self.get_state()
 
-    def get_state(self, player_id):
-        state = np.array(self.board)
-        # Normalização: O jogador atual vê as suas peças como 1 e as do outro como -1
-        if player_id == 1:
-            norm_state = np.where(state == 1, 1, np.where(state == 2, -1, 0))
-        else:
-            norm_state = np.where(state == 2, 1, np.where(state == 1, -1, 0))
-        
-        # SUCESSO: Devolver norm_state
-        return torch.FloatTensor(norm_state).unsqueeze(0).unsqueeze(0)
+    def get_state(self):
+        """A rede neural (CNN) continua a precisar da matriz 2D (8x8)."""
+        # Remoldamos apenas na hora de enviar para o PyTorch
+        state_2d = self.board.reshape(8, 8)
+        return torch.FloatTensor(state_2d).unsqueeze(0).unsqueeze(0)
 
     def step(self, action_idx, player_id):
         x, y = action_idx % 8, action_idx // 8
@@ -36,8 +33,8 @@ class OthelloEnv:
                 break
 
         # 1. Punição por jogada inválida
-        if [x, y] not in valid_moves:
-            return self.get_state(player_id), -10, True  # Jogo acaba com penalização
+        if not is_valid:
+            return self.get_state(), -10, True 
 
         # 2. Executar a jogada
         self.board = OthelloLogic.simulate_move(self.board, player_id, x, y)
@@ -62,7 +59,7 @@ class OthelloEnv:
             if p1_count == p2_count:
                 reward = 0
 
-        return self.get_state(player_id), reward, done
+        return self.get_state(), reward, done
 
     def get_valid_mask(self, player_id):
         """Retorna máscara de 64 posições."""

@@ -3,7 +3,6 @@ import torch
 import argparse
 import numpy as np
 import os
-import time
 from typing import List, Tuple
 from agents.base_agent import BaseOthelloAgent
 from src.network import OthelloNet
@@ -22,26 +21,11 @@ class AIAgent(BaseOthelloAgent):
             self.model.eval()
             print(f"Modelo {model_path} carregado com sucesso!")
         else:
-            print(
-                "Aviso: Modelo não encontrado. O agente vai jogar de forma aleatória."
-            )
+            print("Aviso: Modelo não encontrado. O agente vai jogar de forma aleatória.")
 
-    async def deliberate(self, board, valid_actions):
-
-        # Add a tiny delay so humans can watch the game unfold
-        await asyncio.sleep(0.5)
-        obs = np.array(board)
-        if self.player_id == 1:
-            # Inverter: onde é 1 vira 2, onde é 2 vira 1
-            obs = np.where(obs == 1, 1, np.where(obs == 2, -1, 0))
-        else:
-            obs = np.where(obs == 2, 1, np.where(obs == 1, -1, 0))
-
-        obs_tensor = torch.FloatTensor(obs).to(self.device)
-
-        with torch.no_grad():
-            # A rede dá uma pontuação (Q-value) para cada uma das 64 casas
-            q_values = self.model(obs_tensor)
+    async def deliberate(self, board: List[List[int]], valid_actions: List[List[int]]) -> Tuple[int, int]:
+        
+        await asyncio.sleep(0.1)
 
         if len(valid_actions) == 1:
             return valid_actions[0]
@@ -95,7 +79,7 @@ if __name__ == "__main__":
         "-m",
         "--model",
         type=str,
-        default="models/othello_best_strategic.pth",
+        default="models/othello_best_strategi.pth",
         help="Agent model path",
     )
     args = parser.parse_args()
