@@ -168,13 +168,12 @@ def train(episodes: int = 5000, win_rate_threshold: float = 0.6, use_threshold: 
     print(time.strftime("%H:%M:%S"))
 
     for ep in range(episodes):
-        # ALTERNÂNCIA: IA é Player 1 nos pares, Player 2 nos ímpares
         ai_player = 1 if ep % 2 == 0 else 2
         opp_player = 3 - ai_player
         
         env.reset()
         done = False
-        current_player = 1 # Othello começa sempre pelo Player 1
+        current_player = 1
         is_hard_mode = ep % 5 == 0
         is_dummy = random.random() < 0.5
         done = False
@@ -187,102 +186,137 @@ def train(episodes: int = 5000, win_rate_threshold: float = 0.6, use_threshold: 
                 opponent_type = "minimax"
             
         while not done:
-            # 1. Obter jogadas válidas para quem tem o turno
             valid_mask = env.get_valid_mask(current_player)
             
-            # Se o jogador atual não tem jogadas, passa a vez
             if not any(valid_mask):
                 current_player = 3 - current_player
-                # Se o próximo também não tiver, o jogo acaba
                 if not any(env.get_valid_mask(current_player)):
                     break
                 continue
 
-            # --- TURNO DA IA ---
             if current_player == ai_player:
-                state = env.get_state(ai_player).to(device)
+                state_nnue = board_to_nnue_format(env.board, ai_player)
+                valid_moves = OthelloLogic.get_valid_moves(env.board, ai_player)
                 
-                # Escolha da ação (Epsilon-Greedy)
                 if random.random() < epsilon:
-                    action = random.choice([i for i, m in enumerate(valid_mask) if m == 1])
+                    move = random.choice(valid_moves)
+                    action = move[1] * 8 + move[0]
                 else:
                     with torch.no_grad():
-                        q_values = policy_net(state)
-                        # MÁSCARA SEGURA: -1e7 para inválidas
-                        mask_tensor = torch.FloatTensor(valid_mask).to(device)
-                        q_values = torch.where(mask_tensor.bool(), q_values, torch.tensor(-1e7, device=device))
-                        action = q_values.argmax().item()
+                        best_action = None
+                        best_score = -float('inf')
+                        
+                        for move in valid_moves:
+                            next_board = OthelloLogic.simulate_move(env.board, ai_player, move[0], move[1])
+                            
+                            opp_moves = OthelloLogic.get_valid_moves(next_board, opp_player)
+                            if len(opp_moves) == 0:
+                                obs = board_to_nnue_format(next_board, ai_player).unsqueeze(0).to(device)
+                                future_score = policy_net(obs).item()
+                            else:
+                                obs_list = []
+                                for opp_move in opp_moves:
+                                    after_opp = OthelloLogic.simulate_move(next_board, opp_player, opp_move[0], opp_move[1])
+                                    obs_list.append(board_to_nnue_format(after_opp, ai_player))
+                                
+                                batch_obs = torch.stack(obs_list).to(device)
+                                scores = policy_net(batch_obs).squeeze(-1)
+                                
+                                future_score = torch.min(scores).item()
+                            
+                            action_idx = move[1] * 8 + move[0]
+                            immediate_reward = 0
+                            if action_idx in [0, 7, 56, 63]: immediate_reward = 2.0
+                            elif action_idx in [1, 8, 9, 6, 14, 15, 48, 49, 57, 62, 55, 54]: immediate_reward = -1.0
+                            
+                            total_score = future_score + immediate_reward
+                            
+                            if total_score > best_score:
+                                best_score = total_score
+                                best_action = move
 
+                        action = best_action[1] * 8 + best_action[0]
+                        
                 _, reward, done = env.step(action, ai_player)
                 
-                # Reward Shaping (Baseado na ação da IA)
-                if action in [0, 7, 56, 63]:
-                    reward += 2.0
-                if action in [1, 8, 9, 6, 14, 15, 48, 49, 57, 62, 55, 54]:
-                    reward -= 1.0
+                if action in [0, 7, 56, 63]: reward += 2.0
+                if action in [1, 8, 9, 6, 14, 15, 48, 49, 57, 62, 55, 54]: reward -= 1.0
 
-                next_state = env.get_state(ai_player).to(device)
-                next_mask = env.get_valid_mask(ai_player)
-                
-                # Guardar na memória (Sempre da perspectiva da IA)
-                memory.push(state, action, reward, next_state, next_mask, done)
+                next_state_nnue = board_to_nnue_format(env.board, ai_player)
+                memory.push(state_nnue, None, reward, next_state_nnue, None, done)
 
-                # --- OPTIMIZAÇÃO (BATCH) ---
-                if len(memory.buffer) > batch_size:
+                step_count += 1
+                if len(memory.buffer) > batch_size and step_count % 4 == 0:
                     transitions = memory.sample(batch_size)
-                    b_state = torch.cat([t[0] for t in transitions])
-                    b_action = torch.tensor([t[1] for t in transitions], device=device).unsqueeze(1)
+                    
+                    b_state = torch.stack([t[0] for t in transitions]).to(device)
                     b_reward = torch.tensor([t[2] for t in transitions], device=device, dtype=torch.float32)
-                    b_next_state = torch.cat([t[3] for t in transitions])
-                    b_next_mask = torch.from_numpy(np.array([t[4] for t in transitions])).to(device).float()
+                    b_next_state = torch.stack([t[3] for t in transitions]).to(device)
                     b_done = torch.tensor([t[5] for t in transitions], device=device, dtype=torch.float32)
 
-                    current_q = policy_net(b_state).gather(1, b_action)
-                    with torch.no_grad():
-                        # CÁLCULO DO TARGET SEM EXPLODIR O LOSS
-                        next_q_values = target_net(b_next_state)
-                        fill_value = torch.full_like(next_q_values, -1e7)
-                        masked_next_q = torch.where(b_next_mask.bool(), next_q_values, fill_value)
-                        
-                        max_next_q, _ = masked_next_q.max(1)
-                        # Se não há moves no próximo estado, valor é 0
-                        max_next_q = torch.where(b_next_mask.sum(1) > 0, max_next_q, torch.zeros_like(max_next_q))
-                        target_q = b_reward + (gamma * max_next_q * (1 - b_done))
+                    current_v = policy_net(b_state).squeeze()
 
-                    loss = F.smooth_l1_loss(current_q.squeeze(), target_q)
+                    with torch.no_grad():
+                        next_v = target_net(b_next_state).squeeze()
+                        target_v = b_reward + (gamma * next_v * (1 - b_done))
+
+                    loss = F.smooth_l1_loss(current_v, target_v)
+                    
                     optimizer.zero_grad()
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 1.0)
                     optimizer.step()
                 
-                current_player = opp_player # Troca turno
+                current_player = opp_player
 
-            # --- TURNO DO ADVERSÁRIO ---
             else:
-                if is_hard_mode:
-                    classical_agent.set_difficulty("h")
-                    classical_agent.transposition_table = {}
-                    _, move = classical_agent.minmax(env.board, 2, float('-inf'), float('inf'), True, opp_player, classical_agent.use_mobility)
-                    opp_idx = move[1] * 8 + move[0]
-                else:
-                    classical_agent.set_difficulty("n")
+                if opponent_type == "dummy":
                     opp_idx = random.choice([i for i, m in enumerate(valid_mask) if m == 1])
-                
+                elif opponent_type == "mixed":
+                    if is_dummy:
+                        opp_idx = random.choice([i for i, m in enumerate(valid_mask) if m == 1])
+                    else:  
+                        classical_agent.set_difficulty("n")
+                        classical_agent.transposition_table = {}
+                        _, move = classical_agent.minmax(env.board, 2, float('-inf'), float('inf'), True, opp_player, classical_agent.use_mobility)
+                        opp_idx = move[1] * 8 + move[0]
+                        
+                elif opponent_type == "minimax":
+                    if is_hard_mode:
+                        classical_agent.set_difficulty("h")
+                        classical_agent.transposition_table = {}
+                        _, move = classical_agent.minmax(env.board, 4, float('-inf'), float('inf'), True, opp_player, classical_agent.use_mobility)
+                        opp_idx = move[1] * 8 + move[0]
+                    else:
+                        classical_agent.set_difficulty("n")
+                        classical_agent.transposition_table = {}
+                        _, move = classical_agent.minmax(env.board, 2, float('-inf'), float('inf'), True, opp_player, classical_agent.use_mobility)
+                        opp_idx = move[1] * 8 + move[0]
+                    
                 _, _, done = env.step(opp_idx, opp_player)
-                current_player = ai_player # Troca turno
+                
+                if done:
+                    p1 = np.count_nonzero(env.board == 1)
+                    p2 = np.count_nonzero(env.board == 2)
+                    final_reward = 1 if p1 > p2 else -1 if p1 < p2 else 0
+                    if ai_player == 2: final_reward = -final_reward
+                    
+                    next_state_nnue = board_to_nnue_format(env.board, ai_player)
+                    memory.push(state_nnue, None, final_reward, next_state_nnue, None, done)
+                
+                current_player = ai_player
 
-        # --- FIM DO EPISÓDIO: ESTATÍSTICAS E EXAME ---
         if (ep + 1) % 1000 == 0:
             test_winrate = evaluate_vs_minimax(policy_net, env, classical_agent, device, last_test_winrate)
             last_test_winrate = test_winrate
             if test_winrate >= best_test_winrate:
                 best_test_winrate = test_winrate
                 torch.save(policy_net.state_dict(), "models/othello_best_strategic.pth")
-                print(f"\n[EXAME] Ep {ep+1}: {test_winrate*100:.2f}% vs Minimax (NOVO RECORDE)")
+                print(f"!!! NOVO RECORDE ESTRATÉGICO SALVO ({test_winrate*100}%) !!!\n")
 
-        # Verificar quem ganhou para o win_history
-        p1_c = sum(row.count(1) for row in env.board)
-        p2_c = sum(row.count(2) for row in env.board)
+        p1_c = np.count_nonzero(env.board == 1)
+        p2_c = np.count_nonzero(env.board == 2)
+        
         if ai_player == 1:
             win_history.append(1 if p1_c > p2_c else 0)
         else:
@@ -295,10 +329,8 @@ def train(episodes: int = 5000, win_rate_threshold: float = 0.6, use_threshold: 
             win_rate = sum(win_history) / 100
             if win_rate < 0.35:
                 epsilon = min(0.5, epsilon + 0.15)
-                print(
-                    f"-- RECOVERY: WinRate {win_rate:.2f} baixa, Eps subiu para {epsilon:.2f} --"
-                )
-        
+                print(f"-- RECOVERY: WinRate {win_rate:.2f} baixa, Eps subiu para {epsilon:.2f} --")
+
         if (ep + 1) % 100 == 0:
             curr_time = time.time()
             win_rate = sum(win_history) / len(win_history)
@@ -342,6 +374,8 @@ def train(episodes: int = 5000, win_rate_threshold: float = 0.6, use_threshold: 
                 f"Ep {ep + 1}/{episodes} | Loss: {loss.item():.4f} | WinRate: {win_rate:.2f} | Eps: {epsilon:.2f} | Time: {curr_time - start_time:.1f}s | Est: {hours:02d}h {minutes:02d}m {seconds:02d}s | Dur: {duration_hours:02d}h {duration_minutes:02d}m {duration_seconds:02d}s"
             )
             start_time = curr_time
+
+    torch.save(policy_net.state_dict(), "models/othello_brain_final.pth")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Treino do Agente de Inteligência Artificial - Othello NNUE")
