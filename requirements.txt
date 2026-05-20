@@ -4,3 +4,4 @@ pyright
 pdoc
 torch
 numpy
+numba
