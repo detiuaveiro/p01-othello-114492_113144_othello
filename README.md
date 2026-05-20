@@ -1,89 +1,81 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/64wEcMIk)
-# <img src="frontend/favicon.svg" alt="logo" width="128" height="128" align="middle"> SI2 - Othello
+# Intelligent Systems II: Autonomous Othello Agents
 
-Othello is a classic strategy board game played on an 8x8 grid. The game involves two players, Black and White, who take turns placing their discs on the board. The primary objective is to out-position your opponent by "sandwiching" their pieces between your own, which allows you to flip them to your color. The player with the most discs of their color on the board when no more moves can be made wins the game.
+**Authors:** Francisco Carvalho (114492) & João Viegas (113144)
 
-This project provides a simulation environment for Othello, featuring a backend server that manages the game state, a frontend for visualization, and a framework for developing autonomous agents. The backend handles the game logic, enforces rules, and communicates with connected agents via WebSockets, while the frontend provides a real-time view of the board and match statistics.
+## 1. Project Overview & Execution Instructions
 
-## Game Rules
+This project implements an autonomous agent for the classic board game Othello. Our final submission utilizes an **Efficiently Updatable Neural Network (NNUE)** trained via Deep Q-Learning (DQN).
 
-The game is played on an 8x8 board. It starts with four discs placed in a square in the center of the grid: two white and two black. Black always moves first.
+To run our agents against the simulation server, follow these instructions:
 
-- **Objective:** Have more discs of your color than your opponent when the board is full or neither player can move.
-- **Valid Move:** A move is made by placing a disc of your color on an empty square that "outflanks" one or more opponent discs. "Outflanking" means having a disc of your color at each end of a line (horizontal, vertical, or diagonal) of one or more contiguous opponent discs.
-- **Flipping:** All outflanked opponent discs are flipped to your color.
-- **Skipping Turns:** If a player has no valid moves, their turn is skipped. If neither player can move, the game ends.
-
-### State and Actions Example
-
-The game state is communicated to agents as a JSON object:
-```json
-{
-  "type": "state",
-  "board": [[0, 0, ...], ...],
-  "current_turn": 1,
-  "valid_actions": [[2, 3], [3, 2], [4, 5], [5, 4]]
-}
-```
-An action is a simple move command:
-```json
-{
-  "action": "move",
-  "x": 2,
-  "y": 3
-}
-```
-
-## Setup
-
-The simulation can be launched using Docker Compose, while agents are typically executed locally.
-
-1. **Start the Simulation**:
-   ```bash
-   docker compose up
-   ```
-   This will start the backend server (port 8765) and the frontend viewer (port 8080).
-
-2. **Execute Agents**:
-   Create and activate a virtual environment, install the requirements, and run your agents:
+1. **Start the backend server:** `docker compose up`
+2. **Prepare the environment:** 
    ```bash
    python3 -m venv venv
    source venv/bin/activate
    pip install -r requirements.txt
-   python agents/dummy_agent.py
    ```
+3. **Run the Main Agent (NNUE-DQN):** `python -m agents.ai_agent`
+4. *(Optional)* **Run the Classical Teacher:** `python -m agents.classical_agent -d h`
 
-## Project Structure
+---
 
-- `backend/`: Python server using `websockets` that handles game logic and state broadcasting.
-- `frontend/`: HTML5 Canvas-based visualization for monitoring the game.
-- `agents/`: Framework and implementations for autonomous agents.
-  - `base_agent.py`: Abstract base class for all agents.
-  - `dummy_agent.py`: Simple agent that makes random moves.
-  - `manual_agent.py`: Agent for manual control via terminal input.
-- `compose.yml`: Docker Compose configuration for the full stack.
+## 2. Solution Architectures
 
-## Development
+Our group decided to build a highly optimized classical baseline to serve as both a rigorous benchmark and a "Teacher" for our modern Deep Learning approach.
 
-To develop a new agent, inherit from `BaseOthelloAgent` and implement the `deliberate` method.
+### 2.1. The Classical Baseline (Minimax + Numba)
+To establish a robust benchmark, we built a Minimax algorithm with Alpha-Beta pruning. 
+* **Performance Optimization:** We flattened the 2D boards and compiled the core Othello logic into machine code using **Numba (`@njit`)**, achieving a ~50x speedup in evaluation.
+* **Heuristics & Move Ordering:** The agent evaluates positional weights and dynamic mobility, optimizing Alpha-Beta cutoffs by testing corner moves first.
+* **The "Predictable Teacher" Limitation:** While highly optimized, this Minimax implementation is purely deterministic. It will always play the exact same optimal sequence for any given board. As detailed in Section 3, this lack of stochasticity presented a significant challenge during the AI training phase.
 
-```python
-from agents.base_agent import BaseOthelloAgent
+### 2.2. Residual Value Network (NNUE) with DQN
+Our final and best-performing agent utilizes a custom Neural Network architecture inspired by Efficiently Updatable Neural Networks (NNUE). Instead of predicting the action directly, the model acts as a **Value Network**, evaluating the strength of a given board state.
 
-class MyAgent(BaseOthelloAgent):
-    async def deliberate(self, board, valid_actions):
-        # Your strategy here
-        if valid_actions:
-            return valid_actions[0]
-        return None
-```
+#### Feature Extraction (State Representation)
+Rather than feeding raw 8x8 grids, the board is transformed into a **132-dimensional feature vector**:
+* `[0:64]`: Agent's piece positions (1.0 if present, else 0.0).
+* `[64:128]`: Opponent's piece positions (1.0 if present, else 0.0).
+* `[128:132]`: Hand-crafted strategic heuristics normalized between -1 and 1:
+  - Relative Corner Control.
+  - X-Square Risk Penalty (avoiding corners' adjacent cells).
+  - Relative Mobility (difference in available legal moves).
+  - Center Control.
 
-Refer to the [API Documentation](https://mariolpantunes.github.io/si2-othello/) for more details.
+#### Network Architecture (ResNet)
+The model was built using PyTorch and employs modern Deep Learning stabilization techniques:
+* **Input Layer:** A fully connected layer expanding the 132 features to 256 dimensions, followed by ReLU, **Layer Normalization**, and **Dropout (10%)** to prevent overfitting.
+* **Residual Block:** A hidden block with two 256-neuron linear layers using a **Skip Connection** (`x = res_block(x) + identity`). This residual architecture allows deeper feature correlation while mitigating the vanishing gradient problem.
+* **Output Head:** A bottleneck progression `(256 -> 64 -> 16 -> 1)` that condenses the spatial and strategic features into a single scalar value representing the state's Q-value.
 
-## Authors
+#### Deliberation Strategy
+During gameplay, the agent identifies all valid moves, simulates the board state resulting from each move, and evaluates them through the Residual Value Network. The move that yields the highest predicted state value is executed.
 
-* **Mário Antunes** - [mariolpantunes](https://github.com/mariolpantunes)
+---
 
-## License
+## 3. Engineering Challenges & Solutions
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Developing a generalized AI for Othello presented a major technical hurdle regarding how the agent generalized its knowledge.
+
+### The "Bad Teacher" Problem (Deterministic Overfitting)
+Initially, we trained our neural network against our standard Minimax agent. The AI quickly achieved a 100% win rate during training but completely failed during real-world testing. 
+
+**The Cause:** Because the Minimax agent was purely deterministic, it acted as a predictable and inflexible teacher. The neural network did not learn the generalized rules of Othello; instead, it memorized a single, highly specific choreographed sequence of moves to exploit the Minimax's exact heuristic. As soon as a real match deviated by a single move, the AI's strategy collapsed.
+
+**The Solution (Stochastic Openings):** We injected chaos into the curriculum by forcing the "Teacher" agent to play its first two moves completely at random. This TCEC-style (Top Chess Engine Championship) approach forced the Neural Network to start matches from thousands of unique, unpredictable board states, breaking the memorization loop and forcing true spatial generalization. We also implemented **Reward Shaping**, penalizing the agent for playing in hazardous X-Squares and rewarding it heavily for securing corners during training.
+
+---
+
+## 4. Final Performance Evaluation
+
+To rigorously test our final NNUE-DQN agent, we ran a TCEC-style benchmark using 10 stochastic openings (playing each as both Black and White) to prevent deterministic sequence memorization.
+
+| Opponent | Win Rate | Margin (Avg Pieces) | Conclusion |
+| :--- | :--- | :--- | :--- |
+| **Minimax Easy (Depth 2)** | **70.0%** | +7.2 | Agent consistently avoids shallow traps and dominates basic lookahead. |
+| **Minimax Normal (Depth 4)** | **50.0%** | +1.2 | Agent performs on par with a 4-step exhaustive search, proving the strategic depth of the NNUE features. |
+| **Minimax Hard (Depth 6 + Mob)** | **~10.0%** | Negative | Exhaustive deep search with mobility heuristics outperforms our model's immediate pattern recognition. |
+
+**Final Conclusion:**
+The NNUE architecture proved to be highly effective and extremely fast at inference time. Achieving a 50% win rate against a robust Depth-4 Alpha-Beta search demonstrates that the network successfully learned deep spatial and mobility concepts (such as corner control and edge stability) without needing to explicitly traverse a complex decision tree. Furthermore, the development of the Numba-compiled classical engine was vital to provide a challenging training curriculum and properly benchmark the agent's limitations. An improvement that could be made was simply adding a discount factor, make the teacher have some randomness and not be greedy.
