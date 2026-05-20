@@ -69,7 +69,7 @@ Initially, we trained our neural network against our standard Minimax agent. The
 
 ## 4. Final Performance Evaluation
 
-To rigorously test our final NNUE-DQN agent, we ran a TCEC-style benchmark using 10 stochastic openings (playing each as both Black and White) to prevent deterministic sequence memorization.
+To rigorously test our final NNUE-DQN agent, we ran a TCEC-style benchmark (present in `run_benchmark.py`) using 10 stochastic openings (playing each as both Black and White) to prevent deterministic sequence memorization.
 
 | Opponent | Win Rate | Margin (Avg Pieces) | Conclusion |
 | :--- | :--- | :--- | :--- |
