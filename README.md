@@ -56,14 +56,17 @@ During gameplay, the agent identifies all valid moves, simulates the board state
 
 ## 3. Engineering Challenges & Solutions
 
-Developing a generalized AI for Othello presented a major technical hurdle regarding how the agent generalized its knowledge.
+Developing a generalized AI for Othello presented major technical hurdles regarding how the agent acquired and generalized its knowledge.
 
-### The "Bad Teacher" Problem (Deterministic Overfitting)
+### 3.1. Deterministic Loops & Server Mechanics
+During early testing on the simulation server, we observed that match outcomes were repeating exactly (e.g., consistently losing by the exact same margin). Because both our NNUE (using `argmax`) and the Classical Agent are 100% deterministic, any match starting from the standard initial board played out identically every single time. Additionally, we discovered that the simulation server sometimes alternates which player makes the first move (forcing White to play first). We had to ensure our agent's state normalization (`1` for self, `-1` for opponent) allowed it to seamlessly handle both initiating and responding roles.
+
+### 3.2. The "Bad Teacher" Problem (Deterministic Overfitting)
 Initially, we trained our neural network against our standard Minimax agent. The AI quickly achieved a 100% win rate during training but completely failed during real-world testing. 
 
 **The Cause:** Because the Minimax agent was purely deterministic, it acted as a predictable and inflexible teacher. The neural network did not learn the generalized rules of Othello; instead, it memorized a single, highly specific choreographed sequence of moves to exploit the Minimax's exact heuristic. As soon as a real match deviated by a single move, the AI's strategy collapsed.
 
-**The Solution (Stochastic Openings):** We injected chaos into the curriculum by forcing the "Teacher" agent to play its first two moves completely at random. This TCEC-style (Top Chess Engine Championship) approach forced the Neural Network to start matches from thousands of unique, unpredictable board states, breaking the memorization loop and forcing true spatial generalization. We also implemented **Reward Shaping**, penalizing the agent for playing in hazardous X-Squares and rewarding it heavily for securing corners during training.
+**The Solution (Stochastic Openings):** We injected chaos into the curriculum by forcing the "Teacher" agent to play its first two moves completely at random. This TCEC-style (Top Chess Engine Championship) approach forced the Neural Network to start matches from thousands of unique, unpredictable board states, breaking the memorization loop and forcing true spatial generalization. We also implemented **Reward Shaping**, penalizing the agent for playing in hazardous X-Squares and rewarding it heavily for securing corners.
 
 ---
 
@@ -73,9 +76,12 @@ To rigorously test our final NNUE-DQN agent, we ran a TCEC-style benchmark (pres
 
 | Opponent | Win Rate | Margin (Avg Pieces) | Conclusion |
 | :--- | :--- | :--- | :--- |
+| **Random (Dummy Agent)** | **~100.0%** | +35.0 | Agent flawlessly exploits erratic moves and secures massive victories. |
 | **Minimax Easy (Depth 2)** | **70.0%** | +7.2 | Agent consistently avoids shallow traps and dominates basic lookahead. |
 | **Minimax Normal (Depth 4)** | **50.0%** | +1.2 | Agent performs on par with a 4-step exhaustive search, proving the strategic depth of the NNUE features. |
 | **Minimax Hard (Depth 6 + Mob)** | **~10.0%** | Negative | Exhaustive deep search with mobility heuristics outperforms our model's immediate pattern recognition. |
 
 **Final Conclusion:**
-The NNUE architecture proved to be highly effective and extremely fast at inference time. Achieving a 50% win rate against a robust Depth-4 Alpha-Beta search demonstrates that the network successfully learned deep spatial and mobility concepts (such as corner control and edge stability) without needing to explicitly traverse a complex decision tree. Furthermore, the development of the Numba-compiled classical engine was vital to provide a challenging training curriculum and properly benchmark the agent's limitations. An improvement that could be made was simply adding a discount factor, make the teacher have some randomness and not be greedy.
+The NNUE architecture proved to be highly effective and extremely fast at inference time. Achieving a 50% win rate against a robust Depth-4 Alpha-Beta search demonstrates that the network successfully learned deep spatial and mobility concepts (such as corner control and edge stability) without needing to explicitly traverse a complex decision tree. Furthermore, the development of the Numba-compiled classical engine was vital to provide a challenging training curriculum and properly benchmark the agent's limitations. 
+
+Future improvements could include tuning the reward discount factor ($\gamma$) and introducing permanent stochasticity (e.g., epsilon-greedy variations) to the teacher's policy during training to prevent purely greedy exploitation.
