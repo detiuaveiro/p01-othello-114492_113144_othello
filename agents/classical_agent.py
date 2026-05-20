@@ -2,6 +2,8 @@ import asyncio
 import argparse
 import time
 from typing import List, Optional, Tuple, Dict
+
+import numpy as np
 from agents.base_agent import BaseOthelloAgent
 from agents.utils import OthelloLogic
 
@@ -78,7 +80,7 @@ class ClassicalAgent(BaseOthelloAgent):
 
     def minmax(
         self,
-        board: List[List[int]],
+        board_array, # Agora recebe o Numpy array
         depth: int,
         alpha: float,
         beta: float,
@@ -110,7 +112,8 @@ class ClassicalAgent(BaseOthelloAgent):
 
         opponent = 3 - player_id
         current_p = player_id if maximizing_player else opponent
-        valid_moves = OthelloLogic.get_valid_moves(board, current_p)
+        
+        valid_moves = OthelloLogic.get_valid_moves(board_array, current_p)
 
         # Base case: reach depth limit or game over
         if depth == 0 or not valid_moves:

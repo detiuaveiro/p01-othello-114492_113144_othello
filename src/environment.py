@@ -2,7 +2,6 @@ import numpy as np
 import torch
 from agents.utils import OthelloLogic
 
-
 class OthelloEnv:
     def __init__(self):
         self.reset()
@@ -26,12 +25,15 @@ class OthelloEnv:
         return torch.FloatTensor(norm_state).unsqueeze(0).unsqueeze(0)
 
     def step(self, action_idx, player_id):
-        """
-        Executa uma jogada e retorna: (novo_estado, recompensa, fim_de_jogo)
-        action_idx: um número de 0 a 63
-        """
         x, y = action_idx % 8, action_idx // 8
         valid_moves = OthelloLogic.get_valid_moves(self.board, player_id)
+
+        # Verificar se a jogada [x, y] está na lista de válidas
+        is_valid = False
+        for i in range(len(valid_moves)):
+            if valid_moves[i][0] == x and valid_moves[i][1] == y:
+                is_valid = True
+                break
 
         # 1. Punição por jogada inválida
         if [x, y] not in valid_moves:
@@ -41,15 +43,16 @@ class OthelloEnv:
         self.board = OthelloLogic.simulate_move(self.board, player_id, x, y)
 
         # 3. Verificar se o jogo acabou
-        done = not OthelloLogic.get_valid_moves(
-            self.board, 1
-        ) and not OthelloLogic.get_valid_moves(self.board, 2)
+        p1_moves = len(OthelloLogic.get_valid_moves(self.board, 1))
+        p2_moves = len(OthelloLogic.get_valid_moves(self.board, 2))
+        done = (p1_moves == 0) and (p2_moves == 0)
 
         # 4. Calcular Recompensa
         reward = 0
         if done:
-            p1_count = sum(row.count(1) for row in self.board)
-            p2_count = sum(row.count(2) for row in self.board)
+            # np.count_nonzero é instantâneo comparado com loops normais
+            p1_count = np.count_nonzero(self.board == 1)
+            p2_count = np.count_nonzero(self.board == 2)
 
             if player_id == 1:
                 reward = 1 if p1_count > p2_count else -1
@@ -62,9 +65,10 @@ class OthelloEnv:
         return self.get_state(player_id), reward, done
 
     def get_valid_mask(self, player_id):
-        """Retorna um array de 64 posições com 1 onde a jogada é válida e 0 onde não é."""
-        mask = np.zeros(64)
+        """Retorna máscara de 64 posições."""
+        mask = np.zeros(64, dtype=np.float32)
         valid_moves = OthelloLogic.get_valid_moves(self.board, player_id)
-        for x, y in valid_moves:
+        for i in range(len(valid_moves)):
+            x, y = valid_moves[i]
             mask[y * 8 + x] = 1
         return mask

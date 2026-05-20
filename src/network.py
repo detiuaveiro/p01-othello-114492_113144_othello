@@ -1,18 +1,35 @@
 import torch.nn as nn
-import torch.nn.functional as F
-
 
 class OthelloNet(nn.Module):
     def __init__(self):
         super(OthelloNet, self).__init__()
-        # Entrada: 64 casas (tabuleiro 8x8)
-        self.fc1 = nn.Linear(64, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, 64)  # Saída: 64 valores (um para cada casa)
+        
+        self.input_layer = nn.Sequential(
+            nn.Linear(132, 256),
+            nn.ReLU(),
+            nn.LayerNorm(256),
+            nn.Dropout(0.1)
+        )
+        
+        self.res_block1 = nn.Sequential(
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.LayerNorm(256),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.LayerNorm(256)
+        )
+        
+        self.output_head = nn.Sequential(
+            nn.Linear(256, 64),
+            nn.ReLU(),
+            nn.Linear(64, 16),
+            nn.ReLU(),
+            nn.Linear(16, 1)
+        )
 
     def forward(self, x):
-        # x chega como (batch, 8, 8), vamos "achatar" para (batch, 64)
-        x = x.view(-1, 64).float()
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)  # Retorna o "valor" de cada jogada (Q-values)
+        x = self.input_layer(x)
+        identity = x
+        x = self.res_block1(x) + identity  
+        return self.output_head(x)
